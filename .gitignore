@@ -1,0 +1,30 @@
+Thumbs.db
+.DS_Store
+.gradle
+build/
+target/
+out/
+.micronaut/
+.idea
+*.iml
+*.ipr
+*.iws
+.project
+.settings
+.classpath
+.factorypath
+
+src/main/resources/firebase-service-account.json
+
+.idea
+*.iml
+*.ipr
+*.iws
+.project
+.settings
+.classpath
+.factorypath
+.env
+# Firebase service account (do not commit to git)
+# src/main/resources/firebase-service-account.json
+**/firebase-service-account.json
