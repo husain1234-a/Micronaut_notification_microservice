@@ -14,10 +14,6 @@ micronaut:
     admin-email: admin@yash.com
     reset-password-url: http://localhost/reset-password
     application-name: User Management System
-  # User Service Configuration
-  user:
-    service:
-      url: ${USER_SERVICE_URL:http://localhost:8080}
   router:
     static-resources:
       swagger:
@@ -27,7 +23,7 @@ micronaut:
         paths: classpath:META-INF/swagger/views/swagger-ui
         mapping: /swagger-ui/**
   server:
-    port: 8081
+    port: 9000
     access-logger:
       enabled: true
     cors:
@@ -55,6 +51,8 @@ micronaut:
           secret:
             generator:
               secret: "your-256-bit-secret-key-here-make-it-long-and-secure"
+        propagation:
+          enabled: true
         claims:
           roles-name: "roles"
     intercept-url-map:
@@ -113,6 +111,11 @@ datasources:
     minEvictableIdleTimeMillis: 300000
     jmxEnabled: true
  
+# User Service Configuration
+user:
+  service:
+    url: ${USER_SERVICE_URL:http://localhost:8080}
+
 # DynamoDB Configuration
 dynamodb:
   endpoint: "http://localhost:8000"

@@ -47,14 +47,36 @@ public class EmailNotificationService implements NotificationService {
 
     @Override
     public Notification createNotification(Notification notification) {
-        // Validate user exists
-        UserDto user = userService.getUserById(notification.getUserId())
-                .orElseThrow(
-                        () -> new ResourceNotFoundException("User not found with id: " + notification.getUserId()));
+        log.info("[DEBUG] Entered createNotification with userId: {}", notification.getUserId());
+        // UserDto user = userService.getUserById(notification.getUserId())
+        //         .orElseThrow(
+        //                 () -> new ResourceNotFoundException("User not found with id: " + notification.getUserId()));
         notification.setId(UUID.randomUUID().toString());
         notification.setRead(false);
         notification.setCreatedAt(java.time.LocalDateTime.now());
-        return notificationRepository.save(notification);
+        Notification saved = notificationRepository.save(notification);
+        log.info("[DEBUG] Notification saved for userId: {}", notification.getUserId());
+        // Send email to user
+        try {
+            UserDto user = userService.getUserById(notification.getUserId())
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + notification.getUserId()));
+            String subject = notification.getTitle();
+            String textContent = notification.getMessage();
+            String htmlContent = "<p>" + notification.getMessage() + "</p>";
+            boolean emailSent = sendGridEmailService.sendEmail(
+                    user.getEmail(),
+                    subject,
+                    textContent,
+                    htmlContent);
+            if (emailSent) {
+                log.info("[DEBUG] Email sent to user: {}", user.getEmail());
+            } else {
+                log.warn("[DEBUG] Failed to send email to user: {}", user.getEmail());
+            }
+        } catch (Exception e) {
+            log.error("[DEBUG] Error sending email for notification to userId: {}", notification.getUserId(), e);
+        }
+        return saved;
     }
 
     @Override
@@ -293,6 +315,8 @@ public class EmailNotificationService implements NotificationService {
         log.info("Broadcasting notification: {}", title);
         try {
             List<UserDto> users = userService.getAllUsers();
+            log.info("Found {} users to broadcast notification to", users.size());
+            
             for (UserDto user : users) {
                 Notification notification = new Notification();
                 notification.setUserId(user.getId());
@@ -302,10 +326,46 @@ public class EmailNotificationService implements NotificationService {
                 notification.setRead(false);
                 notification.setCreatedAt(java.time.LocalDateTime.now());
                 notificationRepository.save(notification);
+                
+                // Send email to user
+                String subject = title;
+                String textContent = message;
+                String htmlContent = "<h3>" + title + "</h3><br><p>" + message + "</p>";
+                
+                boolean emailSent = sendGridEmailService.sendEmail(
+                        user.getEmail(),
+                        subject,
+                        textContent,
+                        htmlContent);
+                
+                if (emailSent) {
+                    log.info("Successfully sent broadcast email to user: {}", user.getEmail());
+                } else {
+                    log.warn("Failed to send broadcast email to user: {}", user.getEmail());
+                }
             }
+            
+            log.info("Broadcast notification completed successfully for {} users", users.size());
+            
         } catch (Exception e) {
-            log.error("Error in broadcastNotification", e);
-            throw e;
+            log.error("Error in broadcastNotification - User service may not be available", e);
+            // Create a general notification entry for tracking purposes
+            try {
+                Notification generalNotification = new Notification();
+                generalNotification.setTitle(title);
+                generalNotification.setMessage(message);
+                generalNotification.setPriority(priority);
+                generalNotification.setRead(false);
+                generalNotification.setCreatedAt(java.time.LocalDateTime.now());
+                notificationRepository.save(generalNotification);
+                log.info("Saved broadcast notification to database for tracking");
+            } catch (Exception dbError) {
+                log.error("Failed to save broadcast notification to database", dbError);
+            }
+            
+            // Don't throw the exception to avoid breaking the API response
+            // Instead, log it and continue
+            log.warn("Broadcast notification failed due to user service unavailability. Notification saved for tracking.");
         }
     }
 

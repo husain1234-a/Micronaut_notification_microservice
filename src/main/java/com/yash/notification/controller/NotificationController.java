@@ -20,12 +20,14 @@ import com.yash.notification.service.GeminiService;
 import jakarta.inject.Named;
 import io.micronaut.data.model.Page;
 import io.micronaut.data.model.Pageable;
+import com.yash.notification.dto.CreateNotificationRequest;
 
 import java.util.List;
 import java.util.UUID;
 
 @Controller("/api/notifications")
 @Tag(name = "Notification Management")
+@ExecuteOn(TaskExecutors.BLOCKING)
 public class NotificationController {
     private static final Logger LOG = LoggerFactory.getLogger(NotificationController.class);
     private final NotificationService emailNotificationService;
@@ -42,12 +44,24 @@ public class NotificationController {
     }
 
     @Post
+    @ExecuteOn(TaskExecutors.BLOCKING)
     @Operation(summary = "Create a new notification")
     public HttpResponse<Notification> createNotification(@Body @Valid Notification notification) {
         LOG.info("Creating new notification");
         return HttpResponse.created(emailNotificationService.createNotification(notification));
     }
 
+    @ExecuteOn(TaskExecutors.BLOCKING)
+    @Post("/user-creation")
+    public HttpResponse<Notification> createUserNotification(@Body @Valid CreateNotificationRequest request) {
+        Notification notification = new Notification();
+        notification.setUserId(request.getUserId());
+        notification.setTitle(request.getTitle());
+        notification.setMessage(request.getMessage());
+        notification.setPriority(NotificationPriority.HIGH); // or whatever default
+        return HttpResponse.created(emailNotificationService.createNotification(notification));
+    } 
+    
     @Get
     @Operation(summary = "Get all notifications (paginated)")
     public HttpResponse<Page<Notification>> getAllNotifications(
