@@ -1,0 +1,138 @@
+micronaut:
+  application:
+    name: notification-service
+  email:
+    from:
+      email: en20cs301184@medicaps.ac.in
+      name: Ishita Porwal
+  sendgrid:
+    api-key: ${SENDGRID_API_KEY:}
+    from-email: ${SENDGRID_FROM_EMAIL:micronaut.yash@gmail.com}
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+  notifications:
+    admin-email: admin@yash.com
+    reset-password-url: http://localhost/reset-password
+    application-name: User Management System
+  # User Service Configuration
+  user:
+    service:
+      url: ${USER_SERVICE_URL:http://localhost:8080}
+  router:
+    static-resources:
+      swagger:
+        paths: classpath:META-INF/swagger
+        mapping: /swagger/**
+      swagger-ui:
+        paths: classpath:META-INF/swagger/views/swagger-ui
+        mapping: /swagger-ui/**
+  server:
+    port: 8081
+    access-logger:
+      enabled: true
+    cors:
+      enabled: true
+  data:
+    jdbc:
+      repositories:
+        enabled: true
+      default:
+        enabled: true
+        dialect: POSTGRES
+        schema-generate: CREATE
+        schema-generate-sources: CLASSES
+        schema-generate-databases: true
+        schema-generate-create: true
+        schema-generate-drop: true
+        schema-generate-create-sources: CLASSES
+        schema-generate-drop-sources: CLASSES
+  security:
+    enabled: true
+    token:
+      jwt:
+        enabled: true
+        signatures:
+          secret:
+            generator:
+              secret: "your-256-bit-secret-key-here-make-it-long-and-secure"
+        claims:
+          roles-name: "roles"
+    intercept-url-map:
+      - pattern: /api/auth/login
+        access: isAnonymous()
+      - pattern: /api/auth/logout
+        access: isAuthenticated()
+      - pattern: /api/notifications/**
+        access: isAuthenticated()
+      - pattern: /swagger/**
+        access: isAnonymous()
+      - pattern: /swagger-ui/**
+        access: isAnonymous()
+      - pattern: /v3/api-docs/**
+        access: isAnonymous()
+      - pattern: /**
+        access: isAuthenticated()
+  authentication: bearer
+  cors:
+    enabled: true
+    configurations:
+      web:
+        allowedOrigins: "*"
+        allowedMethods: GET,POST,PUT,DELETE,OPTIONS
+        allowedHeaders: "*"
+        exposedHeaders: "*"
+        allowCredentials: true
+        maxAge: 3600
+logger:
+  levels:
+    io.micronaut.security: TRACE
+    io.micronaut.security.rules: TRACE
+    com.yash.notification: DEBUG
+ 
+datasources:
+  default:
+    url: "jdbc:postgresql://localhost:5432/usermanagement"
+    username: "postgres"
+    password: "admin123"
+    driverClassName: org.postgresql.Driver
+    dialect: POSTGRES
+    schema-generate:
+      create: true
+      use-foreign-keys: true
+    db-type: postgres
+    poolName: HikariPool
+    maximumPoolSize: 10
+    minimumIdle: 5
+    idleTimeout: 300000
+    connectionTimeout: 20000
+    maxLifetime: 1200000
+    validationQuery: "SELECT 1"
+    testOnBorrow: true
+    testWhileIdle: true
+    timeBetweenEvictionRunsMillis: 60000
+    minEvictableIdleTimeMillis: 300000
+    jmxEnabled: true
+ 
+# DynamoDB Configuration
+dynamodb:
+  endpoint: "http://localhost:8000"
+ 
+# AWS Configuration
+aws:
+  region: ${AWS_REGION:us-east-1}
+  credentials:
+    access-key-id: ${ACCESS_KEY:dummy}
+    secret-access-key: ${SECRET_KEY:dummy}
+ 
+swagger:
+  title: Notification Service API
+  version: 1.0.0
+  description: API for managing notifications
+ 
+openapi:
+  title: Notification Service API
+  version: 1.0
+  description: API for managing notifications
+
+firebase:
+  service-account-key-path: classpath:firebase-service-account.json

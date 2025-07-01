@@ -16,6 +16,8 @@ import com.yash.notification.config.SendGridConfig;
 import com.yash.notification.service.impl.SendGridEmailService;
 import com.yash.notification.service.GeminiService;
 import jakarta.inject.Named;
+import io.micronaut.data.model.Page;
+import io.micronaut.data.model.Pageable;
 
 @Named("email")
 public class EmailNotificationService implements NotificationService {
@@ -384,5 +386,10 @@ public class EmailNotificationService implements NotificationService {
             notification.setRead(true);
             notificationRepository.save(notification);
         });
+    }
+
+    @Override
+    public Page<Notification> getAllNotifications(Pageable pageable) {
+        return notificationRepository.findAll(pageable);
     }
 }

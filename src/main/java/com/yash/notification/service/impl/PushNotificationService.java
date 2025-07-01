@@ -10,6 +10,8 @@ import com.yash.notification.dto.UserDeviceDto;
 import com.yash.notification.repository.NotificationRepository;
 import com.yash.notification.service.NotificationService;
 import com.yash.notification.service.UserService;
+import io.micronaut.data.model.Page;
+import io.micronaut.data.model.Pageable;
 import jakarta.inject.Named;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,8 +26,8 @@ public class PushNotificationService implements NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserService userService;
 
-    public PushNotificationService(FirebaseMessaging firebaseMessaging, 
-                                 NotificationRepository notificationRepository, 
+    public PushNotificationService(FirebaseMessaging firebaseMessaging,
+                                 NotificationRepository notificationRepository,
                                  UserService userService) {
         this.firebaseMessaging = firebaseMessaging;
         this.notificationRepository = notificationRepository;
@@ -161,5 +163,10 @@ public class PushNotificationService implements NotificationService {
     @Override
     public void markNotificationAsRead(String id) {
         log.info("PUSH: markNotificationAsRead called (not implemented)");
+    }
+
+    @Override
+    public Page<Notification> getAllNotifications(Pageable pageable) {
+        return notificationRepository.findAllBy(pageable);
     }
 }

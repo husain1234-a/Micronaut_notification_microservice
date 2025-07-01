@@ -2,6 +2,8 @@ package com.yash.notification.service;
 
 import com.yash.notification.model.Notification;
 import com.yash.notification.model.NotificationPriority;
+import io.micronaut.data.model.Page;
+import io.micronaut.data.model.Pageable;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,6 +18,8 @@ public interface NotificationService {
     Notification createNotification(Notification notification);
 
     List<Notification> getAllNotifications();
+
+    Page<Notification> getAllNotifications(Pageable pageable);
 
     Optional<Notification> getNotificationById(String id);
 

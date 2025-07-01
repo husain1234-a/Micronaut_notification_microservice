@@ -18,6 +18,8 @@ import com.yash.notification.dto.AIGenerateRequest;
 import com.yash.notification.dto.AIGenerateResponse;
 import com.yash.notification.service.GeminiService;
 import jakarta.inject.Named;
+import io.micronaut.data.model.Page;
+import io.micronaut.data.model.Pageable;
 
 import java.util.List;
 import java.util.UUID;
@@ -47,10 +49,13 @@ public class NotificationController {
     }
 
     @Get
-    @Operation(summary = "Get all notifications")
-    public HttpResponse<List<Notification>> getAllNotifications() {
-        LOG.info("Fetching all notifications");
-        return HttpResponse.ok(emailNotificationService.getAllNotifications());
+    @Operation(summary = "Get all notifications (paginated)")
+    public HttpResponse<Page<Notification>> getAllNotifications(
+            @QueryValue(defaultValue = "0") int page,
+            @QueryValue(defaultValue = "10") int size) {
+        LOG.info("Fetching notifications page {} with size {}", page, size);
+        Pageable pageable = Pageable.from(page, size);
+        return HttpResponse.ok(emailNotificationService.getAllNotifications(pageable));
     }
 
     @Get("/{id}")
