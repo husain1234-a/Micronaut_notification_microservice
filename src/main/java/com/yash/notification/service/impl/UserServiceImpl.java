@@ -1,12 +1,15 @@
 package com.yash.notification.service.impl;
 
 import com.yash.notification.client.UserClient;
-import com.yash.notification.dto.UserDto;
 import com.yash.notification.dto.UserDeviceDto;
+import com.yash.notification.dto.UserDto;
 import com.yash.notification.service.UserService;
+import io.micronaut.http.HttpHeaders;
+import io.micronaut.http.context.ServerRequestContext;
+import jakarta.inject.Singleton;
+import java.util.Collections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import jakarta.inject.Singleton;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,11 +25,17 @@ public class UserServiceImpl implements UserService {
         this.userClient = userClient;
     }
     
+    private String getAuthorizationHeader() {
+        return ServerRequestContext.currentRequest()
+                .map(request -> request.getHeaders().get(HttpHeaders.AUTHORIZATION))
+                .orElse(null);
+    }
+    
     @Override
     public Optional<UserDto> getUserById(UUID id) {
         log.debug("Fetching user by ID: {}", id);
         try {
-            return userClient.getUserById(id);
+            return userClient.getUserById(id, getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching user by ID: {}", id, e);
             return Optional.empty();
@@ -37,10 +46,10 @@ public class UserServiceImpl implements UserService {
     public List<UserDto> getAllUsers() {
         log.debug("Fetching all users");
         try {
-            return userClient.getAllUsers();
+            return userClient.getAllUsers(getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching all users", e);
-            return List.of();
+            return Collections.emptyList();
         }
     }
     
@@ -48,10 +57,10 @@ public class UserServiceImpl implements UserService {
     public List<UserDto> getUsersByRole(String role) {
         log.debug("Fetching users by role: {}", role);
         try {
-            return userClient.getUsersByRole(role);
+            return userClient.getUsersByRole(role, getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching users by role: {}", role, e);
-            return List.of();
+            return Collections.emptyList();
         }
     }
     
@@ -59,7 +68,7 @@ public class UserServiceImpl implements UserService {
     public Optional<UserDto> getUserByEmail(String email) {
         log.debug("Fetching user by email: {}", email);
         try {
-            return userClient.getUserByEmail(email);
+            return userClient.getUserByEmail(email, getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching user by email: {}", email, e);
             return Optional.empty();
@@ -70,10 +79,10 @@ public class UserServiceImpl implements UserService {
     public List<UserDeviceDto> getUserDevices(UUID userId) {
         log.debug("Fetching devices for user: {}", userId);
         try {
-            return userClient.getUserDevices(userId);
+            return userClient.getUserDevices(userId, getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching devices for user: {}", userId, e);
-            return List.of();
+            return Collections.emptyList();
         }
     }
 } 
