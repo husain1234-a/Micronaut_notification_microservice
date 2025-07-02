@@ -23,7 +23,7 @@ public interface NotificationService {
 
     Optional<Notification> getNotificationById(String id);
 
-    List<Notification> getNotificationsByUserId(UUID userId);
+    Page<Notification> getNotificationsByUserId(Pageable pageable,UUID userId);
 
     List<Notification> getNotificationsByUserIdAndPriority(UUID userId, NotificationPriority priority);
 

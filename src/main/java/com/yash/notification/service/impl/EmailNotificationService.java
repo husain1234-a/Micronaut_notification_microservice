@@ -92,11 +92,11 @@ public class EmailNotificationService implements NotificationService {
     }
 
     @Override
-    public List<Notification> getNotificationsByUserId(UUID userId) {
+    public Page<Notification> getNotificationsByUserId(Pageable pageable,UUID userId) {
         userService.getUserById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
         log.info("Fetching notifications for user: {}", userId);
-        return notificationRepository.findByUserId(userId);
+        return notificationRepository.findAllByUserId(pageable,userId);
     }
 
     @Override

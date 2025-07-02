@@ -83,9 +83,13 @@ public class NotificationController {
 
     @Get("/user/{userId}")
     @Operation(summary = "Get notifications by user ID")
-    public HttpResponse<List<Notification>> getNotificationsByUserId(@PathVariable UUID userId) {
+    public HttpResponse<Page<Notification>> getNotificationsByUserId (
+            @QueryValue(defaultValue = "0") int page,
+            @QueryValue(defaultValue = "2") int size,
+            @PathVariable UUID userId) {
         LOG.info("Fetching notifications for user: {}", userId);
-        return HttpResponse.ok(emailNotificationService.getNotificationsByUserId(userId));
+        Pageable pageable = Pageable.from(page, size);
+        return HttpResponse.ok(emailNotificationService.getNotificationsByUserId(pageable,userId));
     }
 
     // @Get("/user/{userId}/priority/{priority}")

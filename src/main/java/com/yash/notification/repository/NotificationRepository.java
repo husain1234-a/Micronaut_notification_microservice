@@ -35,13 +35,6 @@ public class NotificationRepository {
         return Optional.ofNullable(notificationTable.getItem(key));
     }
 
-    public List<Notification> findByUserId(UUID userId) {
-        return notificationTable.scan()
-                .items()
-                .stream()
-                .filter(notification -> notification.getUserId().equals(userId))
-                .collect(Collectors.toList());
-    }
 
     public List<Notification> findByUserIdAndPriority(UUID userId, NotificationPriority priority) {
         return notificationTable.scan()
@@ -85,6 +78,28 @@ public class NotificationRepository {
             pageContent = Collections.emptyList();
         } else {
             pageContent = allNotifications.subList(fromIndex, toIndex);
+        }
+
+        return Page.of(pageContent, pageable, (long) total); // Ensure total is long
+    }
+
+    public Page<Notification> findAllByUserId(Pageable pageable, UUID userId) {
+        List<Notification> allNotificationsByUserId = notificationTable.scan()
+                .items()
+                .stream()
+                .filter(notification -> notification.getUserId().equals(userId))
+                .toList();
+        int total = allNotificationsByUserId.size();
+        int pageNumber = pageable.getNumber();
+        int pageSize = pageable.getSize();
+        int fromIndex = pageNumber * pageSize;
+        int toIndex = Math.min(fromIndex + pageSize, total);
+
+        List<Notification> pageContent;
+        if (fromIndex >= total) {
+            pageContent = Collections.emptyList();
+        } else {
+            pageContent = allNotificationsByUserId.subList(fromIndex, toIndex);
         }
 
         return Page.of(pageContent, pageable, (long) total); // Ensure total is long

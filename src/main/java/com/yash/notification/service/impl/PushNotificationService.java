@@ -78,8 +78,8 @@ public class PushNotificationService implements NotificationService {
     }
 
     @Override
-    public List<Notification> getNotificationsByUserId(UUID userId) {
-        return notificationRepository.findByUserId(userId);
+    public Page<Notification> getNotificationsByUserId(Pageable pageable,UUID userId) {
+        return notificationRepository.findAllByUserId(pageable,userId);
     }
 
     @Override
