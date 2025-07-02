@@ -66,7 +66,7 @@ public class NotificationController {
     @Operation(summary = "Get all notifications (paginated)")
     public HttpResponse<Page<Notification>> getAllNotifications(
             @QueryValue(defaultValue = "0") int page,
-            @QueryValue(defaultValue = "10") int size) {
+            @QueryValue(defaultValue = "2") int size) {
         LOG.info("Fetching notifications page {} with size {}", page, size);
         Pageable pageable = Pageable.from(page, size);
         return HttpResponse.ok(emailNotificationService.getAllNotifications(pageable));

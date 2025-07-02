@@ -450,6 +450,6 @@ public class EmailNotificationService implements NotificationService {
 
     @Override
     public Page<Notification> getAllNotifications(Pageable pageable) {
-        return notificationRepository.findAll(pageable);
+        return notificationRepository.findAllBy(pageable);
     }
 }
