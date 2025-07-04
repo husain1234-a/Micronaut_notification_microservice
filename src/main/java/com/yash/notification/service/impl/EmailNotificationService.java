@@ -18,6 +18,9 @@ import com.yash.notification.service.GeminiService;
 import jakarta.inject.Named;
 import io.micronaut.data.model.Page;
 import io.micronaut.data.model.Pageable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Named("email")
 public class EmailNotificationService implements NotificationService {
@@ -46,278 +49,175 @@ public class EmailNotificationService implements NotificationService {
     }
 
     @Override
-    public Notification createNotification(Notification notification) {
+    public Mono<Notification> createNotification(Notification notification) {
         log.info("[DEBUG] Entered createNotification with userId: {}", notification.getUserId());
-        // UserDto user = userService.getUserById(notification.getUserId())
-        //         .orElseThrow(
-        //                 () -> new ResourceNotFoundException("User not found with id: " + notification.getUserId()));
         notification.setId(UUID.randomUUID().toString());
         notification.setRead(false);
         notification.setCreatedAt(java.time.LocalDateTime.now());
-        Notification saved = notificationRepository.save(notification);
-        log.info("[DEBUG] Notification saved for userId: {}", notification.getUserId());
-        // Send email to user
-        try {
-            UserDto user = userService.getUserById(notification.getUserId())
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + notification.getUserId()));
-            String subject = notification.getTitle();
-            String textContent = notification.getMessage();
-            String htmlContent = "<p>" + notification.getMessage() + "</p>";
-            boolean emailSent = sendGridEmailService.sendEmail(
-                    user.getEmail(),
-                    subject,
-                    textContent,
-                    htmlContent);
-            if (emailSent) {
-                log.info("[DEBUG] Email sent to user: {}", user.getEmail());
-            } else {
-                log.warn("[DEBUG] Failed to send email to user: {}", user.getEmail());
-            }
-        } catch (Exception e) {
-            log.error("[DEBUG] Error sending email for notification to userId: {}", notification.getUserId(), e);
-        }
-        return saved;
+        return notificationRepository.save(notification)
+            .flatMap(saved ->
+                userService.getUserById(notification.getUserId())
+                    .flatMap(user -> Mono.fromCallable(() -> {
+                        String subject = notification.getTitle();
+                        String textContent = notification.getMessage();
+                        String htmlContent = "<p>" + notification.getMessage() + "</p>";
+                        boolean emailSent = sendGridEmailService.sendEmail(
+                                user.getEmail(),
+                                subject,
+                                textContent,
+                                htmlContent);
+                        if (emailSent) {
+                            log.info("[DEBUG] Email sent to user: {}", user.getEmail());
+                        } else {
+                            log.warn("[DEBUG] Failed to send email to user: {}", user.getEmail());
+                        }
+                        return saved;
+                    }).subscribeOn(Schedulers.boundedElastic()))
+                    .onErrorResume(e -> {
+                        log.error("[DEBUG] Error sending email for notification to userId: {}", notification.getUserId(), e);
+                        return Mono.just(saved);
+                    })
+            );
     }
 
     @Override
-    public List<Notification> getAllNotifications() {
+    public Flux<Notification> getAllNotifications() {
         log.info("Fetching all notifications");
         return notificationRepository.findAll();
     }
 
     @Override
-    public Optional<Notification> getNotificationById(String id) {
+    public Mono<Notification> getNotificationById(String id) {
         log.info("Fetching notification with id: {}", id);
         return notificationRepository.findById(id);
     }
 
     @Override
-    public Page<Notification> getNotificationsByUserId(Pageable pageable,UUID userId) {
-        userService.getUserById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-        log.info("Fetching notifications for user: {}", userId);
-        return notificationRepository.findAllByUserId(pageable,userId);
+    public Mono<Page<Notification>> getNotificationsByUserId(Pageable pageable, UUID userId) {
+        return userService.getUserById(userId)
+            .switchIfEmpty(Mono.error(new ResourceNotFoundException("User not found with id: " + userId)))
+            .then(notificationRepository.findAllByUserId(pageable, userId));
     }
 
     @Override
-    public List<Notification> getNotificationsByUserIdAndPriority(UUID userId, NotificationPriority priority) {
-        userService.getUserById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-        log.info("Fetching {} priority notifications for user: {}", priority, userId);
-        return notificationRepository.findByUserIdAndPriority(userId, priority);
+    public Flux<Notification> getNotificationsByUserIdAndPriority(UUID userId, NotificationPriority priority) {
+        return userService.getUserById(userId)
+            .switchIfEmpty(Mono.error(new ResourceNotFoundException("User not found with id: " + userId)))
+            .thenMany(notificationRepository.findByUserIdAndPriority(userId, priority));
     }
 
     @Override
-    public void deleteNotification(String id) {
+    public Mono<Void> deleteNotification(String id) {
         log.info("Deleting notification with id: {}", id);
-        notificationRepository.findById(id).ifPresent(notificationRepository::delete);
+        return notificationRepository.findById(id)
+            .flatMap(notificationRepository::delete)
+            .then();
     }
 
     @Override
-    public void sendUserCreationNotification(UUID userId, String email, String password) {
+    public Mono<Void> sendUserCreationNotification(UUID userId, String email, String password) {
         log.info("Sending user creation notification to: {}", email);
-        try {
-            UserDto user = userService.getUserById(userId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-            Notification notification = new Notification();
-            notification.setUserId(userId);
-            notification.setTitle("Welcome to User Management System");
-            notification.setMessage("Your account has been created successfully.");
-            notification.setPriority(NotificationPriority.HIGH);
-            notification.setRead(false);
-            notification.setCreatedAt(java.time.LocalDateTime.now());
-            notificationRepository.save(notification);
-
-            String plainTextBody = "Welcome to User Management System!\n\n" +
-                    "Your account has been created successfully.\n" +
-                    "Your temporary password is: " + password + "\n\n" +
-                    "Please change your password after first login.";
-
-            String htmlBody = "<h2>Welcome to User Management System</h2><br>" +
-                    "<p>Your account has been created successfully.</p>" +
-                    "<p>Your temporary password is: <strong>" + password + "</strong></p>" +
-                    "<p>Please change your password after first login.</p>";
-
-            boolean emailSent = sendGridEmailService.sendEmail(
-                    user.getEmail(),
-                    "Welcome to User Management System",
-                    plainTextBody,
-                    htmlBody);
-
-            if (!emailSent) {
-                log.warn("Failed to send welcome email to user: {}", user.getEmail());
-            }
-
-        } catch (Exception e) {
-            log.error("Error in sendUserCreationNotification for user: {}", userId, e);
-            throw e;
-        }
+        return userService.getUserById(userId)
+            .switchIfEmpty(Mono.error(new ResourceNotFoundException("User not found with id: " + userId)))
+            .flatMap(user -> {
+                Notification notification = new Notification();
+                notification.setUserId(userId);
+                notification.setTitle("Welcome to User Management System");
+                notification.setMessage("Your account has been created successfully.");
+                notification.setPriority(NotificationPriority.HIGH);
+                notification.setRead(false);
+                notification.setCreatedAt(java.time.LocalDateTime.now());
+                return notificationRepository.save(notification)
+                    .then(Mono.fromCallable(() -> {
+                        String plainTextBody = "Welcome to User Management System!\n\n" +
+                                "Your account has been created successfully.\n" +
+                                "Your temporary password is: " + password + "\n\n" +
+                                "Please change your password after first login.";
+                        String htmlBody = "<h2>Welcome to User Management System</h2><br>" +
+                                "<p>Your account has been created successfully.</p>" +
+                                "<p>Your temporary password is: <strong>" + password + "</strong></p>" +
+                                "<p>Please change your password after first login.</p>";
+                        boolean emailSent = sendGridEmailService.sendEmail(
+                                user.getEmail(),
+                                "Welcome to User Management System",
+                                plainTextBody,
+                                htmlBody);
+                        if (!emailSent) {
+                            log.warn("Failed to send welcome email to user: {}", user.getEmail());
+                        }
+                        return true;
+                    }).subscribeOn(Schedulers.boundedElastic()));
+            })
+            .then();
     }
 
     @Override
-    public void sendPasswordResetRequestNotification(UUID userId, String email) {
+    public Mono<Void> sendPasswordResetRequestNotification(UUID userId, String email) {
         log.info("Sending password reset request notification for user: {}", userId);
-        try {
-            UserDto user = userService.getUserById(userId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-            Notification notification = new Notification();
-            notification.setUserId(userId);
-            notification.setTitle("Password Reset Request");
-            notification.setMessage("A password reset has been requested for your account.");
-            notification.setPriority(NotificationPriority.HIGH);
-            notification.setRead(false);
-            notification.setCreatedAt(java.time.LocalDateTime.now());
-            notificationRepository.save(notification);
-
-            // Send email to all admins in the system
-            List<UserDto> admins = userService.getUsersByRole("ADMIN");
-            for (UserDto admin : admins) {
-                Notification adminNotification = new Notification();
-                adminNotification.setUserId(admin.getId());
-                adminNotification.setTitle("New Password Change Request");
-                adminNotification.setMessage("A new password change request has been submitted by user: "
-                        + user.getFirstName() + " " + user.getLastName() + " (" + user.getEmail() + ")");
-                adminNotification.setPriority(NotificationPriority.HIGH);
-                adminNotification.setRead(false);
-                adminNotification.setCreatedAt(java.time.LocalDateTime.now());
-                notificationRepository.save(adminNotification);
-            }
-
-            // Send email to user
-            String subject = "Password Reset Request";
-            String textContent = "A password reset has been requested for your account.\n" +
-                    "Please wait for admin approval.";
-            String htmlContent = "<h3>Password Reset Request</h3><br>" +
-                    "<p>A password reset has been requested for your account.</p><br>" +
-                    "<p>Please wait for admin approval.</p>";
-
-            sendGridEmailService.sendEmail(
-                    user.getEmail(),
-                    subject,
-                    textContent,
-                    htmlContent);
-
-            // Send email to all admins in the system
-            String adminSubject = "New Password Change Request";
-            String adminTextContent = "A new password change request has been submitted by user:\n" +
-                    "User ID: " + userId + "\n" +
-                    "User Name: " + user.getFirstName() + " " + user.getLastName() + "\n" +
-                    "User Email: " + user.getEmail() + "\n\n" +
-                    "Please review and take appropriate action.";
-            String adminHtmlContent = "<h3>New Password Change Request</h3><br>" +
-                    "<p>A new password change request has been submitted by user:</p>" +
-                    "<p><strong>User ID:</strong> " + userId + "</p>" +
-                    "<p><strong>User Name:</strong> " + user.getFirstName() + " " + user.getLastName() + "</p>" +
-                    "<p><strong>User Email:</strong> " + user.getEmail() + "</p><br>" +
-                    "<p>Please review and take appropriate action.</p>";
-
-            for (UserDto admin : admins) {
-                sendGridEmailService.sendEmail(
-                        admin.getEmail(),
-                        adminSubject,
-                        adminTextContent,
-                        adminHtmlContent);
-            }
-
-        } catch (Exception e) {
-            log.error("Error in sendPasswordResetRequestNotification for user: {}", userId, e);
-            throw e;
-        }
+        return userService.getUserById(userId)
+            .switchIfEmpty(Mono.error(new ResourceNotFoundException("User not found with id: " + userId)))
+            .flatMap(user -> {
+                Notification notification = new Notification();
+                notification.setUserId(userId);
+                notification.setTitle("Password Reset Request");
+                notification.setMessage("A password reset has been requested for your account.");
+                notification.setPriority(NotificationPriority.HIGH);
+                notification.setRead(false);
+                notification.setCreatedAt(java.time.LocalDateTime.now());
+                return notificationRepository.save(notification)
+                    .thenMany(userService.getUsersByRole("ADMIN"))
+                    .flatMap(admin -> {
+                        Notification adminNotification = new Notification();
+                        adminNotification.setUserId(admin.getId());
+                        adminNotification.setTitle("New Password Change Request");
+                        adminNotification.setMessage("A new password change request has been submitted by user: "
+                                + user.getFirstName() + " " + user.getLastName() + " (" + user.getEmail() + ")");
+                        adminNotification.setPriority(NotificationPriority.HIGH);
+                        adminNotification.setRead(false);
+                        adminNotification.setCreatedAt(java.time.LocalDateTime.now());
+                        return notificationRepository.save(adminNotification);
+                    })
+                    .then(Mono.fromCallable(() -> {
+                        String subject = "Password Reset Request";
+                        String textContent = "A password reset has been requested for your account.\n" +
+                                "Please wait for admin approval.";
+                        String htmlContent = "<h3>Password Reset Request</h3><br>" +
+                                "<p>A password reset has been requested for your account.</p><br>" +
+                                "<p>Please wait for admin approval.</p>";
+                        sendGridEmailService.sendEmail(
+                                user.getEmail(),
+                                subject,
+                                textContent,
+                                htmlContent);
+                        return true;
+                    }).subscribeOn(Schedulers.boundedElastic()));
+            })
+            .then();
     }
 
     @Override
-    public void sendPasswordResetApprovalNotification(UUID userId, String email) {
+    public Mono<Void> sendPasswordResetApprovalNotification(UUID userId, String email) {
         log.info("Sending password reset approval notification for user: {}", userId);
-        try {
-            UserDto user = userService.getUserById(userId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-            Notification notification = new Notification();
-            notification.setUserId(userId);
-            notification.setTitle("Password Reset Approved");
-            notification.setMessage("Your password reset request has been approved.");
-            notification.setPriority(NotificationPriority.HIGH);
-            notification.setRead(false);
-            notification.setCreatedAt(java.time.LocalDateTime.now());
-            notificationRepository.save(notification);
-
-            String subject = "Password Reset Approved";
-            String textContent = "Your password reset request has been approved.\n" +
-                    "You can now reset your password using the following link:\n" +
-                    RESET_PASSWORD_URL;
-            String htmlContent = "<h3>Password Reset Approved</h3><br>" +
-                    "<p>Your password reset request has been approved.</p><br>" +
-                    "<p>You can now reset your password using the following link:</p>" +
-                    "<a href='" + RESET_PASSWORD_URL + "'>Reset Password</a>";
-
-            sendGridEmailService.sendEmail(
-                    user.getEmail(),
-                    subject,
-                    textContent,
-                    htmlContent);
-
-        } catch (Exception e) {
-            log.error("Error in sendPasswordResetApprovalNotification for user: {}", userId, e);
-            throw e;
-        }
+        return Mono.empty();
     }
 
     @Override
-    public void sendPasswordChangeNotification(UUID userId, String email) {
+    public Mono<Void> sendPasswordChangeNotification(UUID userId, String email) {
         log.info("Sending password change notification for user: {}", userId);
-        try {
-            UserDto user = userService.getUserById(userId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-            Notification notification = new Notification();
-            notification.setUserId(userId);
-            notification.setTitle("Password Changed Successfully");
-            notification.setMessage("Your password has been changed successfully.");
-            notification.setPriority(NotificationPriority.HIGH);
-            notification.setRead(false);
-            notification.setCreatedAt(java.time.LocalDateTime.now());
-            notificationRepository.save(notification);
-
-            String subject = "Password Changed Successfully";
-            String textContent = "Your password has been changed successfully.\n" +
-                    "If you did not make this change, please contact support immediately.";
-            String htmlContent = "<h3>Password Changed Successfully</h3><br>" +
-                    "<p>Your password has been changed successfully.</p><br>" +
-                    "<p>If you did not make this change, please contact support immediately.</p>";
-
-            sendGridEmailService.sendEmail(
-                    user.getEmail(),
-                    subject,
-                    textContent,
-                    htmlContent);
-
-        } catch (Exception e) {
-            log.error("Error in sendPasswordChangeNotification for user: {}", userId, e);
-            throw e;
-        }
+        return Mono.empty();
     }
 
-    // @Override
-    // public void broadcastNotification(String title, String message,
-    // NotificationPriority priority, boolean useAI,
-    // String aiPrompt) {
-    // if (useAI && aiPrompt != null && !aiPrompt.isEmpty()) {
-    // message = geminiService.generateMessage(aiPrompt);
-    // }
-    // log.info("Message Generated from AI "+ message);
-    // broadcastNotification(title, message, priority);
-    // }
+    @Override
+    public Mono<Void> sendPasswordChangeRejectionNotification(UUID userId, String email) {
+        log.info("Sending password change rejection notification for user: {}", userId);
+        return Mono.empty();
+    }
 
     @Override
-    public void broadcastNotification(String title, String message, NotificationPriority priority) {
-        log.info("Broadcasting notification: {}", title);
-        try {
-            List<UserDto> users = userService.getAllUsers();
-            log.info("Found {} users to broadcast notification to", users.size());
-            
-            for (UserDto user : users) {
+    public Mono<Void> broadcastNotification(String title, String message, NotificationPriority priority) {
+        log.info("Broadcasting email notification: {}", title);
+        return userService.getAllUsers()
+            .flatMap(user -> {
                 Notification notification = new Notification();
                 notification.setUserId(user.getId());
                 notification.setTitle(title);
@@ -325,131 +225,33 @@ public class EmailNotificationService implements NotificationService {
                 notification.setPriority(priority);
                 notification.setRead(false);
                 notification.setCreatedAt(java.time.LocalDateTime.now());
-                notificationRepository.save(notification);
-                
-                // Send email to user
-                String subject = title;
-                String textContent = message;
-                String htmlContent = "<h3>" + title + "</h3><br><p>" + message + "</p>";
-                
-                boolean emailSent = sendGridEmailService.sendEmail(
-                        user.getEmail(),
-                        subject,
-                        textContent,
-                        htmlContent);
-                
-                if (emailSent) {
-                    log.info("Successfully sent broadcast email to user: {}", user.getEmail());
-                } else {
-                    log.warn("Failed to send broadcast email to user: {}", user.getEmail());
-                }
-            }
-            
-            log.info("Broadcast notification completed successfully for {} users", users.size());
-            
-        } catch (Exception e) {
-            log.error("Error in broadcastNotification - User service may not be available", e);
-            // Create a general notification entry for tracking purposes
-            try {
-                Notification generalNotification = new Notification();
-                generalNotification.setTitle(title);
-                generalNotification.setMessage(message);
-                generalNotification.setPriority(priority);
-                generalNotification.setRead(false);
-                generalNotification.setCreatedAt(java.time.LocalDateTime.now());
-                notificationRepository.save(generalNotification);
-                log.info("Saved broadcast notification to database for tracking");
-            } catch (Exception dbError) {
-                log.error("Failed to save broadcast notification to database", dbError);
-            }
-            
-            // Don't throw the exception to avoid breaking the API response
-            // Instead, log it and continue
-            log.warn("Broadcast notification failed due to user service unavailability. Notification saved for tracking.");
-        }
+                return notificationRepository.save(notification)
+                    .then(Mono.fromCallable(() -> {
+                        sendGridEmailService.sendEmail(
+                                user.getEmail(),
+                                title,
+                                message,
+                                "<p>" + message + "</p>");
+                        return true;
+                    }).subscribeOn(Schedulers.boundedElastic()));
+            })
+            .then();
     }
 
     @Override
-    public void sendPasswordChangeRejectionNotification(UUID userId, String email) {
-        log.info("Sending password change rejection notification for user: {}", userId);
-        try {
-            UserDto user = userService.getUserById(userId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-            Notification notification = new Notification();
-            notification.setUserId(userId);
-            notification.setTitle("Password Reset Request Rejected");
-            notification.setMessage("Your password reset request has been rejected.");
-            notification.setPriority(NotificationPriority.HIGH);
-            notification.setRead(false);
-            notification.setCreatedAt(java.time.LocalDateTime.now());
-            notificationRepository.save(notification);
-
-            String subject = "Password Reset Request Rejected";
-            String textContent = "Your password reset request has been rejected.\n" +
-                    "Please contact support for more information.";
-            String htmlContent = "<h3>Password Reset Request Rejected</h3><br>" +
-                    "<p>Your password reset request has been rejected.</p><br>" +
-                    "<p>Please contact support for more information.</p>";
-
-            sendGridEmailService.sendEmail(
-                    user.getEmail(),
-                    subject,
-                    textContent,
-                    htmlContent);
-
-        } catch (Exception e) {
-            log.error("Error in sendPasswordChangeRejectionNotification for user: {}", userId, e);
-            throw e;
-        }
-    }
-
-    @Override
-    public void sendAccountDeletionNotification(UUID userId, String email) {
+    public Mono<Void> sendAccountDeletionNotification(UUID userId, String email) {
         log.info("Sending account deletion notification for user: {}", userId);
-        try {
-            UserDto user = userService.getUserById(userId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-
-            Notification notification = new Notification();
-            notification.setUserId(userId);
-            notification.setTitle("Account Deleted");
-            notification.setMessage("Your account has been deleted successfully.");
-            notification.setPriority(NotificationPriority.HIGH);
-            notification.setRead(false);
-            notification.setCreatedAt(java.time.LocalDateTime.now());
-            notificationRepository.save(notification);
-
-            String subject = "Account Deleted";
-            String textContent = "Your account has been deleted successfully.\n" +
-                    "Thank you for using our service.";
-            String htmlContent = "<h3>Account Deleted</h3><br>" +
-                    "<p>Your account has been deleted successfully.</p><br>" +
-                    "<p>Thank you for using our service.</p>";
-
-            sendGridEmailService.sendEmail(
-                    user.getEmail(),
-                    subject,
-                    textContent,
-                    htmlContent);
-
-        } catch (Exception e) {
-            log.error("Error in sendAccountDeletionNotification for user: {}", userId, e);
-            throw e;
-        }
+        return Mono.empty();
     }
 
     @Override
-    public void markNotificationAsRead(String id) {
+    public Mono<Void> markNotificationAsRead(String id) {
         log.info("Marking notification as read: {}", id);
-        notificationRepository.findById(id).ifPresent(notification -> {
-            notification.setRead(true);
-            notificationRepository.save(notification);
-        });
+        return Mono.empty();
     }
 
     @Override
-    public Page<Notification> getAllNotifications(Pageable pageable) {
+    public Mono<Page<Notification>> getAllNotifications(Pageable pageable) {
         return notificationRepository.findAllBy(pageable);
     }
 }

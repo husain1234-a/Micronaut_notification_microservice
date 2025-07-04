@@ -7,6 +7,8 @@ import io.micronaut.data.model.Pageable;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
  * NotificationService interface. Implementations should be annotated
@@ -15,36 +17,36 @@ import java.util.UUID;
  * dynamic selection.
  */
 public interface NotificationService {
-    Notification createNotification(Notification notification);
+    Mono<Notification> createNotification(Notification notification);
 
-    List<Notification> getAllNotifications();
+    Flux<Notification> getAllNotifications();
 
-    Page<Notification> getAllNotifications(Pageable pageable);
+    Mono<Page<Notification>> getAllNotifications(Pageable pageable);
 
-    Optional<Notification> getNotificationById(String id);
+    Mono<Notification> getNotificationById(String id);
 
-    Page<Notification> getNotificationsByUserId(Pageable pageable,UUID userId);
+    Mono<Page<Notification>> getNotificationsByUserId(Pageable pageable, UUID userId);
 
-    List<Notification> getNotificationsByUserIdAndPriority(UUID userId, NotificationPriority priority);
+    Flux<Notification> getNotificationsByUserIdAndPriority(UUID userId, NotificationPriority priority);
 
-    void deleteNotification(String id);
+    Mono<Void> deleteNotification(String id);
 
-    void sendUserCreationNotification(UUID userId, String email, String password);
+    Mono<Void> sendUserCreationNotification(UUID userId, String email, String password);
 
-    void sendPasswordResetRequestNotification(UUID userId, String email);
+    Mono<Void> sendPasswordResetRequestNotification(UUID userId, String email);
 
-    void sendPasswordResetApprovalNotification(UUID userId, String email);
+    Mono<Void> sendPasswordResetApprovalNotification(UUID userId, String email);
 
-    void sendPasswordChangeNotification(UUID userId, String email);
+    Mono<Void> sendPasswordChangeNotification(UUID userId, String email);
 
-    void sendPasswordChangeRejectionNotification(UUID userId, String email);
+    Mono<Void> sendPasswordChangeRejectionNotification(UUID userId, String email);
 
-    void broadcastNotification(String title, String message, NotificationPriority priority);
+    Mono<Void> broadcastNotification(String title, String message, NotificationPriority priority);
 
     // void broadcastNotification(String title, String message, NotificationPriority
     // priority, boolean useAI,String aiPrompt);
 
-    void sendAccountDeletionNotification(UUID userId, String email);
+    Mono<Void> sendAccountDeletionNotification(UUID userId, String email);
 
-    void markNotificationAsRead(String id);
+    Mono<Void> markNotificationAsRead(String id);
 }

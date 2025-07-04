@@ -17,6 +17,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.UUID;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Named("push")
 public class PushNotificationService implements NotificationService {
@@ -35,138 +38,163 @@ public class PushNotificationService implements NotificationService {
     }
 
     @Override
-    public Notification createNotification(Notification notification) {
+    public Mono<Notification> createNotification(Notification notification) {
         log.info("Creating push notification for user {}", notification.getUserId());
-        Notification savedNotification = notificationRepository.save(notification);
-
-        List<UserDeviceDto> userDevices = userService.getUserDevices(notification.getUserId());
-
-        if(userDevices.isEmpty()) {
-            log.warn("No devices found for user {}. Cannot send push notification.", notification.getUserId());
-            return savedNotification;
-        }
-
-        for (UserDeviceDto device : userDevices) {
-            Message message = Message.builder()
-                    .setNotification(com.google.firebase.messaging.Notification.builder()
-                            .setTitle(savedNotification.getTitle())
-                            .setBody(savedNotification.getMessage())
-                            .build())
-                    .setToken(device.getFcmToken())
-                    .build();
-
-            try {
-                String response = firebaseMessaging.send(message);
-                log.info("Successfully sent message to device {}: {}", device.getFcmToken(), response);
-            } catch (FirebaseMessagingException e) {
-                log.error("Failed to send message to device {}", device.getFcmToken(), e);
-                // Here you might want to handle invalid tokens, e.g., by deleting them from the database
-            }
-        }
-
-        return savedNotification;
+        return notificationRepository.save(notification)
+            .flatMap(savedNotification ->
+                userService.getUserDevices(notification.getUserId())
+                    .collectList()
+                    .flatMapMany(userDevices -> {
+                        if (userDevices.isEmpty()) {
+                            log.warn("No devices found for user {}. Cannot send push notification.", notification.getUserId());
+                            return Flux.empty();
+                        }
+                        return Flux.fromIterable(userDevices)
+                            .flatMap(device -> Mono.fromCallable(() -> {
+                                Message message = Message.builder()
+                                        .setNotification(com.google.firebase.messaging.Notification.builder()
+                                                .setTitle(savedNotification.getTitle())
+                                                .setBody(savedNotification.getMessage())
+                                                .build())
+                                        .setToken(device.getFcmToken())
+                                        .build();
+                                try {
+                                    String response = firebaseMessaging.send(message);
+                                    log.info("Successfully sent message to device {}: {}", device.getFcmToken(), response);
+                                } catch (FirebaseMessagingException e) {
+                                    log.error("Failed to send message to device {}", device.getFcmToken(), e);
+                                }
+                                return true;
+                            }).subscribeOn(Schedulers.boundedElastic()));
+                    })
+                    .then(Mono.just(savedNotification))
+            );
     }
 
     @Override
-    public List<Notification> getAllNotifications() {
+    public Flux<Notification> getAllNotifications() {
         return notificationRepository.findAll();
     }
 
     @Override
-    public Optional<Notification> getNotificationById(String id) {
+    public Mono<Notification> getNotificationById(String id) {
         return notificationRepository.findById(id);
     }
 
     @Override
-    public Page<Notification> getNotificationsByUserId(Pageable pageable,UUID userId) {
-        return notificationRepository.findAllByUserId(pageable,userId);
+    public Mono<Page<Notification>> getNotificationsByUserId(Pageable pageable, UUID userId) {
+        return notificationRepository.findAllByUserId(pageable, userId);
     }
 
     @Override
-    public List<Notification> getNotificationsByUserIdAndPriority(UUID userId, NotificationPriority priority) {
-        return Collections.emptyList();
+    public Flux<Notification> getNotificationsByUserIdAndPriority(UUID userId, NotificationPriority priority) {
+        return notificationRepository.findByUserIdAndPriority(userId, priority);
     }
 
     @Override
-    public void deleteNotification(String id) {
+    public Mono<Void> deleteNotification(String id) {
         log.info("PUSH: deleteNotification called (not implemented)");
+        return Mono.empty();
     }
 
     @Override
-    public void sendUserCreationNotification(UUID userId, String email, String password) {
+    public Mono<Void> sendUserCreationNotification(UUID userId, String email, String password) {
         log.info("PUSH: sendUserCreationNotification called (not implemented)");
+        return Mono.empty();
     }
 
     @Override
-    public void sendPasswordResetRequestNotification(UUID userId, String email) {
+    public Mono<Void> sendPasswordResetRequestNotification(UUID userId, String email) {
         log.info("PUSH: sendPasswordResetRequestNotification called (not implemented)");
+        return Mono.empty();
     }
 
     @Override
-    public void sendPasswordResetApprovalNotification(UUID userId, String email) {
+    public Mono<Void> sendPasswordResetApprovalNotification(UUID userId, String email) {
         log.info("PUSH: sendPasswordResetApprovalNotification called (not implemented)");
+        return Mono.empty();
     }
 
     @Override
-    public void sendPasswordChangeNotification(UUID userId, String email) {
+    public Mono<Void> sendPasswordChangeNotification(UUID userId, String email) {
         log.info("PUSH: sendPasswordChangeNotification called (not implemented)");
+        return Mono.empty();
     }
 
     @Override
-    public void sendPasswordChangeRejectionNotification(UUID userId, String email) {
+    public Mono<Void> sendPasswordChangeRejectionNotification(UUID userId, String email) {
         log.info("PUSH: sendPasswordChangeRejectionNotification called (not implemented)");
+        return Mono.empty();
     }
 
     @Override
-    public void broadcastNotification(String title, String message, NotificationPriority priority) {
+    public Mono<Void> broadcastNotification(String title, String message, NotificationPriority priority) {
         log.info("Broadcasting push notification: {}", title);
-        try {
-            List<UserDto> users = userService.getAllUsers();
-            for (UserDto user : users) {
-                Notification notification = new Notification();
-                notification.setUserId(user.getId());
-                notification.setTitle(title);
-                notification.setMessage(message);
-                notification.setPriority(priority);
-                notification.setRead(false);
-                notification.setCreatedAt(java.time.LocalDateTime.now());
-                notificationRepository.save(notification);
-
-                List<UserDeviceDto> userDevices = userService.getUserDevices(user.getId());
-                for (UserDeviceDto device : userDevices) {
-                    Message fcmMessage = Message.builder()
-                            .setNotification(com.google.firebase.messaging.Notification.builder()
-                                    .setTitle(title)
-                                    .setBody(message)
-                                    .build())
-                            .setToken(device.getFcmToken())
-                            .build();
-                    try {
-                        String response = firebaseMessaging.send(fcmMessage);
-                        log.info("Successfully sent broadcast message to device {}: {}", device.getFcmToken(), response);
-                    } catch (FirebaseMessagingException e) {
-                        log.error("Failed to send broadcast message to device {}", device.getFcmToken(), e);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.error("Error in broadcastNotification", e);
-            throw new RuntimeException("Failed to broadcast push notification", e);
-        }
+        return userService.getAllUsers()
+            .collectList()
+            .doOnNext(users -> log.info("[BROADCAST] Full user list received: {}", users))
+            .flatMapMany(users -> Flux.fromIterable(users)
+                .filter(user -> user.getId() != null)
+                .doOnNext(user -> log.info("[BROADCAST] Iterating user: {}", user.getId()))
+                .flatMap(user -> {
+                    Notification notification = new Notification();
+                    notification.setUserId(user.getId());
+                    notification.setTitle(title);
+                    notification.setMessage(message);
+                    notification.setPriority(priority);
+                    notification.setRead(false);
+                    notification.setCreatedAt(java.time.LocalDateTime.now());
+                    log.info("[BROADCAST] Creating notification for user: {}", user.getId());
+                    return notificationRepository.save(notification)
+                        .thenMany(userService.getUserDevices(user.getId())
+                            .collectList()
+                            .doOnNext(devices -> log.info("[BROADCAST] Devices for user {}: {}", user.getId(), devices))
+                            .flatMapMany(devices -> {
+                                if (devices.isEmpty()) {
+                                    log.warn("[BROADCAST] No devices found for user {}", user.getId());
+                                    return Flux.empty();
+                                }
+                                return Flux.fromIterable(devices)
+                                    .flatMap(device -> Mono.fromCallable(() -> {
+                                        log.info("[BROADCAST] Attempting to send to device: {}", device.getFcmToken());
+                                        Message fcmMessage = Message.builder()
+                                                .setNotification(com.google.firebase.messaging.Notification.builder()
+                                                        .setTitle(title)
+                                                        .setBody(message)
+                                                        .build())
+                                                .setToken(device.getFcmToken())
+                                                .build();
+                                        try {
+                                            String response = firebaseMessaging.send(fcmMessage);
+                                            log.info("Successfully sent broadcast message to device {}: {}", device.getFcmToken(), response);
+                                        } catch (FirebaseMessagingException e) {
+                                            log.error("Failed to send broadcast message to device {}", device.getFcmToken(), e);
+                                        }
+                                        return true;
+                                    }).subscribeOn(Schedulers.boundedElastic()));
+                            })
+                        )
+                        .doOnError(e -> log.error("[BROADCAST] Error in notification chain for user {}: {}", user.getId(), e.getMessage(), e));
+                })
+            )
+            .doOnError(e -> log.error("[BROADCAST] Error in broadcastNotification: {}", e.getMessage(), e))
+            .then();
     }
 
     @Override
-    public void sendAccountDeletionNotification(UUID userId, String email) {
+    public Mono<Void> sendAccountDeletionNotification(UUID userId, String email) {
         log.info("PUSH: sendAccountDeletionNotification called (not implemented)");
+        return Mono.empty();
     }
 
     @Override
-    public void markNotificationAsRead(String id) {
+    public Mono<Void> markNotificationAsRead(String id) {
         log.info("PUSH: markNotificationAsRead called (not implemented)");
+        return Mono.empty();
     }
 
     @Override
-    public Page<Notification> getAllNotifications(Pageable pageable) {
+    public Mono<Page<Notification>> getAllNotifications(Pageable pageable) {
         return notificationRepository.findAllBy(pageable);
     }
 }

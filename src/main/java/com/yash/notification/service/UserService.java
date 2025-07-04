@@ -5,11 +5,13 @@ import com.yash.notification.dto.UserDeviceDto;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public interface UserService {
-    Optional<UserDto> getUserById(UUID id);
-    List<UserDto> getAllUsers();
-    List<UserDto> getUsersByRole(String role);
-    Optional<UserDto> getUserByEmail(String email);
-    List<UserDeviceDto> getUserDevices(UUID userId);
+    Mono<UserDto> getUserById(UUID id);
+    Flux<UserDto> getAllUsers();
+    Flux<UserDto> getUsersByRole(String role);
+    Mono<UserDto> getUserByEmail(String email);
+    Flux<UserDeviceDto> getUserDevices(UUID userId);
 } 

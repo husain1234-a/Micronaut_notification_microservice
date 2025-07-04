@@ -17,6 +17,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+
 @Singleton
 public class NotificationRepository {
     private final DynamoDbTable<Notification> notificationTable;
@@ -25,83 +29,89 @@ public class NotificationRepository {
         this.notificationTable = enhancedClient.table("notifications", TableSchema.fromBean(Notification.class));
     }
 
-    public Notification save(Notification notification) {
-        notificationTable.putItem(notification);
-        return notification;
+    public Mono<Notification> save(Notification notification) {
+        return Mono.fromCallable(() -> {
+            notificationTable.putItem(notification);
+            return notification;
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    public Optional<Notification> findById(String id) {
-        Key key = Key.builder().partitionValue(id).build();
-        return Optional.ofNullable(notificationTable.getItem(key));
+    public Mono<Notification> findById(String id) {
+        return Mono.fromCallable(() -> {
+            Key key = Key.builder().partitionValue(id).build();
+            return notificationTable.getItem(key);
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
-
-    public List<Notification> findByUserIdAndPriority(UUID userId, NotificationPriority priority) {
-        return notificationTable.scan()
+    public Flux<Notification> findByUserIdAndPriority(UUID userId, NotificationPriority priority) {
+        return Flux.defer(() -> Flux.fromStream(
+            notificationTable.scan()
                 .items()
                 .stream()
-                .filter(notification -> notification.getUserId().equals(userId) &&
+               .filter(notification -> notification.getUserId() != null && notification.getUserId().equals(userId) &&
                         notification.getPriority() == priority)
-                .collect(Collectors.toList());
+        )).subscribeOn(Schedulers.boundedElastic());
     }
 
-    public void delete(Notification notification) {
-        Key key = Key.builder().partitionValue(notification.getId()).build();
-        notificationTable.deleteItem(key);
+    public Mono<Void> delete(Notification notification) {
+        return Mono.fromRunnable(() -> {
+            Key key = Key.builder().partitionValue(notification.getId()).build();
+            notificationTable.deleteItem(key);
+        }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
-    public List<Notification> findAll() {
-        return notificationTable.scan()
+    public Flux<Notification> findAll() {
+        return Flux.defer(() -> Flux.fromStream(
+            notificationTable.scan()
                 .items()
                 .stream()
-                .collect(Collectors.toList());
+        )).subscribeOn(Schedulers.boundedElastic());
     }
 
-    public List<Notification> findByPriority(NotificationPriority priority) {
-        return notificationTable.scan()
+    public Flux<Notification> findByPriority(NotificationPriority priority) {
+        return Flux.defer(() -> Flux.fromStream(
+            notificationTable.scan()
                 .items()
                 .stream()
                 .filter(notification -> notification.getPriority() == priority)
-                .collect(Collectors.toList());
+        )).subscribeOn(Schedulers.boundedElastic());
     }
 
-    public Page<Notification> findAllBy(Pageable pageable) {
-        List<Notification> allNotifications = findAll();
-        int total = allNotifications.size();
-        int pageNumber = pageable.getNumber();
-        int pageSize = pageable.getSize();
-        int fromIndex = pageNumber * pageSize;
-        int toIndex = Math.min(fromIndex + pageSize, total);
+    public Mono<Page<Notification>> findAllBy(Pageable pageable) {
+        return findAll().collectList().map(allNotifications -> {
+            int total = allNotifications.size();
+            int pageNumber = pageable.getNumber();
+            int pageSize = pageable.getSize();
+            int fromIndex = pageNumber * pageSize;
+            int toIndex = Math.min(fromIndex + pageSize, total);
 
-        List<Notification> pageContent;
-        if (fromIndex >= total) {
-            pageContent = Collections.emptyList();
-        } else {
-            pageContent = allNotifications.subList(fromIndex, toIndex);
-        }
+            List<Notification> pageContent;
+            if (fromIndex >= total) {
+                pageContent = Collections.emptyList();
+            } else {
+                pageContent = allNotifications.subList(fromIndex, toIndex);
+            }
 
-        return Page.of(pageContent, pageable, (long) total); // Ensure total is long
+            return Page.of(pageContent, pageable, (long) total);
+        });
     }
 
-    public Page<Notification> findAllByUserId(Pageable pageable, UUID userId) {
-        List<Notification> allNotificationsByUserId = notificationTable.scan()
-                .items()
-                .stream()
-                .filter(notification -> notification.getUserId().equals(userId))
-                .toList();
-        int total = allNotificationsByUserId.size();
-        int pageNumber = pageable.getNumber();
-        int pageSize = pageable.getSize();
-        int fromIndex = pageNumber * pageSize;
-        int toIndex = Math.min(fromIndex + pageSize, total);
+    public Mono<Page<Notification>> findAllByUserId(Pageable pageable, UUID userId) {
+        return findAll().filter(notification -> notification.getUserId() != null && notification.getUserId().equals(userId)).collectList().map(allNotificationsByUserId -> {
+            int total = allNotificationsByUserId.size();
+            int pageNumber = pageable.getNumber();
+            int pageSize = pageable.getSize();
+            int fromIndex = pageNumber * pageSize;
+            int toIndex = Math.min(fromIndex + pageSize, total);
 
-        List<Notification> pageContent;
-        if (fromIndex >= total) {
-            pageContent = Collections.emptyList();
-        } else {
-            pageContent = allNotificationsByUserId.subList(fromIndex, toIndex);
-        }
+            List<Notification> pageContent;
+            if (fromIndex >= total) {
+                pageContent = Collections.emptyList();
+            } else {
+                pageContent = allNotificationsByUserId.subList(fromIndex, toIndex);
+            }
 
-        return Page.of(pageContent, pageable, (long) total); // Ensure total is long
+            return Page.of(pageContent, pageable, (long) total);
+        });
     }
 }

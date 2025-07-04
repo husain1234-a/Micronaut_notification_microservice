@@ -3,6 +3,7 @@ package com.yash.notification.service.impl;
 import com.yash.notification.client.UserClient;
 import com.yash.notification.dto.UserDeviceDto;
 import com.yash.notification.dto.UserDto;
+import com.yash.notification.dto.UserPage;
 import com.yash.notification.service.UserService;
 import io.micronaut.http.HttpHeaders;
 import io.micronaut.http.context.ServerRequestContext;
@@ -14,6 +15,8 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @Singleton
 public class UserServiceImpl implements UserService {
@@ -32,57 +35,58 @@ public class UserServiceImpl implements UserService {
     }
     
     @Override
-    public Optional<UserDto> getUserById(UUID id) {
+    public Mono<UserDto> getUserById(UUID id) {
         log.debug("Fetching user by ID: {}", id);
         try {
             return userClient.getUserById(id, getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching user by ID: {}", id, e);
-            return Optional.empty();
+            return Mono.error(e);
         }
     }
     
     @Override
-    public List<UserDto> getAllUsers() {
+    public Flux<UserDto> getAllUsers() {
         log.debug("Fetching all users");
         try {
-            return userClient.getAllUsers(getAuthorizationHeader());
+            return userClient.getAllUsers(getAuthorizationHeader())
+                .flatMapMany(userPage -> Flux.fromIterable(userPage.getContent()));
         } catch (Exception e) {
             log.error("Error fetching all users", e);
-            return Collections.emptyList();
+            return Flux.error(e);
         }
     }
     
     @Override
-    public List<UserDto> getUsersByRole(String role) {
+    public Flux<UserDto> getUsersByRole(String role) {
         log.debug("Fetching users by role: {}", role);
         try {
             return userClient.getUsersByRole(role, getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching users by role: {}", role, e);
-            return Collections.emptyList();
+            return Flux.error(e);
         }
     }
     
     @Override
-    public Optional<UserDto> getUserByEmail(String email) {
+    public Mono<UserDto> getUserByEmail(String email) {
         log.debug("Fetching user by email: {}", email);
         try {
             return userClient.getUserByEmail(email, getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching user by email: {}", email, e);
-            return Optional.empty();
+            return Mono.error(e);
         }
     }
     
     @Override
-    public List<UserDeviceDto> getUserDevices(UUID userId) {
+    public Flux<UserDeviceDto> getUserDevices(UUID userId) {
         log.debug("Fetching devices for user: {}", userId);
         try {
             return userClient.getUserDevices(userId, getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching devices for user: {}", userId, e);
-            return Collections.emptyList();
+            return Flux.error(e);
         }
     }
 } 
