@@ -1,5 +1,7 @@
 package com.yash.notification.service;
 
+import reactor.core.publisher.Mono;
+
 public interface GeminiService {
-    String generateMessage(String prompt);
+    Mono<String> generateMessage(String prompt);
 }

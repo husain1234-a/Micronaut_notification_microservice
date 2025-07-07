@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.scheduling.TaskExecutors;
+import reactor.core.publisher.Mono;
 
 @Singleton
 public class GeminiServiceImpl implements GeminiService {
@@ -35,8 +36,7 @@ public class GeminiServiceImpl implements GeminiService {
     }
 
     @Override
-    @ExecuteOn(TaskExecutors.BLOCKING)
-    public String generateMessage(String prompt) {
+    public Mono<String> generateMessage(String prompt) {
         String url = GEMINI_URL + geminiConfig.getApiKey();
         Map<String, Object> part = new HashMap<>();
         part.put("text", prompt);
@@ -47,27 +47,26 @@ public class GeminiServiceImpl implements GeminiService {
 
         HttpRequest<Map<String, Object>> request = HttpRequest.POST(url, body)
                 .contentType(MediaType.APPLICATION_JSON_TYPE);
-        try {
-            LOG.info("Calling Gemini API with prompt: {}", prompt);
-            String response = httpClient.toBlocking().retrieve(request);
-            LOG.info("Gemini API raw response: {}", response);
-
-            // Parse the response to extract the generated text
-            JsonNode jsonResponse = objectMapper.readTree(response);
-            String generatedText = jsonResponse
-                    .path("candidates")
-                    .path(0)
-                    .path("content")
-                    .path("parts")
-                    .path(0)
-                    .path("text")
-                    .asText("AI is unable to generate message.");
-
-            LOG.info("Extracted message from Gemini: {}", generatedText);
-            return generatedText;
-        } catch (Exception e) {
-            LOG.error("Error calling Gemini API: {}", e.getMessage(), e);
-            return "AI is unable to generate message. Error: " + e.getMessage();
-        }
+        return Mono.from(httpClient.retrieve(request, String.class))
+                .map(response -> {
+                    try {
+                        JsonNode jsonResponse = objectMapper.readTree(response);
+                        return jsonResponse
+                                .path("candidates")
+                                .path(0)
+                                .path("content")
+                                .path("parts")
+                                .path(0)
+                                .path("text")
+                                .asText("AI is unable to generate message.");
+                    } catch (Exception e) {
+                        LOG.error("Error parsing Gemini API response: {}", e.getMessage(), e);
+                        return "AI is unable to generate message. Error: " + e.getMessage();
+                    }
+                })
+                .onErrorResume(e -> {
+                    LOG.error("Error calling Gemini API: {}", e.getMessage(), e);
+                    return Mono.just("AI is unable to generate message. Error: Unexpected error");
+                });
     }
 }

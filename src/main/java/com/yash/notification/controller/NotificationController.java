@@ -82,7 +82,7 @@ public class NotificationController {
 
     @Get("/user/{userId}")
     @Operation(summary = "Get notifications by user ID")
-    public Mono<HttpResponse<Page<Notification>>> getNotificationsByUserId (
+    public Mono<HttpResponse<Page<Notification>>> getNotificationsByUserId(
             @QueryValue(defaultValue = "0") int page,
             @QueryValue(defaultValue = "2") int size,
             @PathVariable UUID userId) {
@@ -96,10 +96,12 @@ public class NotificationController {
     // @Get("/user/{userId}/priority/{priority}")
     // @Operation(summary = "Get notifications by user ID and priority")
     // public Flux<Notification> getNotificationsByUserIdAndPriority(
-    //         @PathVariable UUID userId,
-    //         @PathVariable NotificationPriority priority) {
-    //     LOG.info("Fetching {} priority notifications for user: {}", priority, userId);
-    //     return emailNotificationService.getNotificationsByUserIdAndPriority(userId, priority);
+    // @PathVariable UUID userId,
+    // @PathVariable NotificationPriority priority) {
+    // LOG.info("Fetching {} priority notifications for user: {}", priority,
+    // userId);
+    // return emailNotificationService.getNotificationsByUserIdAndPriority(userId,
+    // priority);
     // }
 
     @Patch("/{id}/read")
@@ -120,10 +122,11 @@ public class NotificationController {
 
     @Post("/ai-generate")
     @Operation(summary = "Generate message using AI")
-    public HttpResponse<AIGenerateResponse> generateAIMessage(@Body @Valid AIGenerateRequest request) {
+    public Mono<HttpResponse<AIGenerateResponse>> generateAIMessage(@Body @Valid AIGenerateRequest request) {
         LOG.info("Generating AI message with prompt: {}", request.getPrompt());
-        String generatedMessage = geminiService.generateMessage(request.getPrompt());
-        return HttpResponse.ok(new AIGenerateResponse(generatedMessage));
+        return geminiService.generateMessage(request.getPrompt())
+                .map(AIGenerateResponse::new)
+                .map(HttpResponse::ok);
     }
 
     @Post("/broadcast")
@@ -133,9 +136,10 @@ public class NotificationController {
             return Mono.just(HttpResponse.badRequest());
         }
         NotificationService notificationService = "push".equalsIgnoreCase(request.getChannel())
-            ? pushNotificationService
-            : emailNotificationService;
-        return notificationService.broadcastNotification(request.getTitle(), request.getMessage(), request.getPriority())
+                ? pushNotificationService
+                : emailNotificationService;
+        return notificationService
+                .broadcastNotification(request.getTitle(), request.getMessage(), request.getPriority())
                 .thenReturn(HttpResponse.accepted());
     }
 
