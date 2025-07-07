@@ -13,7 +13,7 @@ import reactor.core.publisher.Flux;
 
 import java.util.UUID;
 
-@Client("http://localhost:8080")
+@Client("http://localhost:8081")
 public interface UserClient {
     
     @Get("/api/users/{id}")
