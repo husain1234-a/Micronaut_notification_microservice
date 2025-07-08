@@ -184,6 +184,14 @@ public class NotificationController {
                 request.getMessage(),
                 request.getPriority());
     }
+
+    @Post("/notify/account-deletion")
+    @Operation(summary = "Send account deletion notification via email")
+    public Mono<HttpResponse<Void>> sendAccountDeletionNotification(@Body AccountDeletionNotificationRequest request) {
+        LOG.info("Received account deletion notification request for user: {}", request.getUserId());
+        return emailNotificationService.sendAccountDeletionNotification(request.getUserId(), request.getEmail())
+                .thenReturn(HttpResponse.accepted());
+    }
 }
 
 @Serdeable
@@ -215,5 +223,24 @@ class TestNotificationRequest {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+}
+
+@Serdeable
+class AccountDeletionNotificationRequest {
+    private UUID userId;
+    private String email;
+
+    public UUID getUserId() {
+        return userId;
+    }
+    public void setUserId(UUID userId) {
+        this.userId = userId;
+    }
+    public String getEmail() {
+        return email;
+    }
+    public void setEmail(String email) {
+        this.email = email;
     }
 }

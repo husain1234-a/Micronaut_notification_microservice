@@ -241,7 +241,33 @@ public class EmailNotificationService implements NotificationService {
     @Override
     public Mono<Void> sendAccountDeletionNotification(UUID userId, String email) {
         log.info("Sending account deletion notification for user: {}", userId);
-        return Mono.empty();
+        return userService.getUserById(userId)
+            .switchIfEmpty(Mono.error(new ResourceNotFoundException("User not found with id: " + userId)))
+            .flatMap(user -> {
+                Notification notification = new Notification();
+                notification.setUserId(userId);
+                notification.setTitle("Account Deleted");
+                notification.setMessage("Your account has been deleted. If this was not you, please contact support.");
+                notification.setPriority(NotificationPriority.HIGH);
+                notification.setRead(false);
+                notification.setCreatedAt(java.time.LocalDateTime.now());
+                return notificationRepository.save(notification)
+                    .then(Mono.fromCallable(() -> {
+                        String subject = "Account Deleted";
+                        String plainTextBody = "Your account has been deleted. If this was not you, please contact support.";
+                        String htmlBody = "<h2>Account Deleted</h2><p>Your account has been deleted. If this was not you, please contact support.</p>";
+                        boolean emailSent = sendGridEmailService.sendEmail(
+                                email,
+                                subject,
+                                plainTextBody,
+                                htmlBody);
+                        if (!emailSent) {
+                            log.warn("Failed to send account deletion email to user: {}", email);
+                        }
+                        return true;
+                    }).subscribeOn(Schedulers.boundedElastic()));
+            })
+            .then();
     }
 
     @Override
