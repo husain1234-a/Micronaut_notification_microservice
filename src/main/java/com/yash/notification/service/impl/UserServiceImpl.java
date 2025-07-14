@@ -49,8 +49,7 @@ public class UserServiceImpl implements UserService {
     public Flux<UserDto> getAllUsers() {
         log.debug("Fetching all users");
         try {
-            return userClient.getAllUsers(getAuthorizationHeader())
-                .flatMapMany(userPage -> Flux.fromIterable(userPage.getContent()));
+            return userClient.getAllUsers(getAuthorizationHeader());
         } catch (Exception e) {
             log.error("Error fetching all users", e);
             return Flux.error(e);

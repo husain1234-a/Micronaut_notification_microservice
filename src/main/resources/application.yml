@@ -86,6 +86,15 @@ logger:
     io.micronaut.security: TRACE
     io.micronaut.security.rules: TRACE
     com.yash.notification: DEBUG
+
+#consul:
+#  client:
+#    host: localhost
+#    port: 8500
+#    registration:
+#      enabled: true
+#    discovery:
+#      enabled: true
  
 datasources:
   default:
@@ -139,3 +148,20 @@ openapi:
 
 firebase:
   service-account-key-path: classpath:firebase-service-account.json
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      sendGrid:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        waitDurationInOpenState: 30s   # "reset" time
+        failureRateThreshold: 50
+  retry:
+    instances:
+      sendGrid:
+        maxAttempts: 3                 # "attempts"
+        waitDuration: 2s               # "delay"
+        exponentialBackoffMultiplier: 2 # optional, for exponential backoff

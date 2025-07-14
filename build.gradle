@@ -55,6 +55,9 @@ dependencies {
     implementation("io.micronaut:micronaut-http-client")
     implementation("com.fasterxml.jackson.core:jackson-databind")
 
+    //Dependencies for consul
+    implementation("io.micronaut.discovery:micronaut-discovery-client")
+
     // Firebase Admin SDK dependency
     implementation("com.google.firebase:firebase-admin:9.2.0")
 

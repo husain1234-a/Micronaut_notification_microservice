@@ -20,7 +20,7 @@ public interface UserClient {
     Mono<UserDto> getUserById(@PathVariable UUID id, @Header String authorization);
     
     @Get("/api/users")
-    Mono<UserPage> getAllUsers(@Header("Authorization") String authorization);
+    Flux<UserDto> getAllUsers(@Header("Authorization") String authorization);
     
     @Get("/api/users")
     Flux<UserDto> getUsersByRole(@QueryValue String role, @Header("Authorization") String authorization);

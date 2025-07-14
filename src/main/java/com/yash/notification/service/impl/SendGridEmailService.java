@@ -12,11 +12,10 @@ import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.IOException;
-import io.micronaut.retry.annotation.CircuitBreaker;
+import io.github.resilience4j.micronaut.annotation.CircuitBreaker;
 import io.micronaut.retry.annotation.Recoverable;
 
 @Singleton
-@Recoverable
 public class SendGridEmailService {
 
     private static final Logger LOG = LoggerFactory.getLogger(SendGridEmailService.class);
@@ -29,7 +28,7 @@ public class SendGridEmailService {
         this.fromEmail = "en20cs301184@medicaps.ac.in"; // Use the from email from your application.yml
     }
 
-    @CircuitBreaker(attempts = "3", reset = "30s", delay = "2s", multiplier = "2")
+    @CircuitBreaker(name = "sendGrid", fallbackMethod = "sendEmailFallback")
     public boolean sendEmail(String to, String subject, String bodyPlainText, String bodyHtmlText) {
         Email from = new Email(fromEmail);
         Email toEmail = new Email(to);
@@ -46,16 +45,19 @@ public class SendGridEmailService {
             Response response = sendGridClient.api(request);
 
             LOG.info("SendGrid email sent. Status code: {}", response.getStatusCode());
-            return response.getStatusCode() >= 200 && response.getStatusCode() < 300;
+            if (response.getStatusCode() >= 200 && response.getStatusCode() < 300) {
+                return true;
+            } else {
+                throw new RuntimeException("SendGrid returned status code: " + response.getStatusCode());
+            }
 
         } catch (IOException e) {
             LOG.error("Failed to send email via SendGrid", e);
-            return false;
+            throw new RuntimeException("Failed to send email via SendGrid", e);
         }
     }
 
-    public boolean sendEmailFallback(String to, String subject, String bodyPlainText, String bodyHtmlText,
-            Throwable t) {
+    public boolean sendEmailFallback(String to, String subject, String bodyPlainText, String bodyHtmlText, Throwable t) {
         LOG.error("[CIRCUIT BREAKER] SendGrid fallback triggered for to: {} subject: {}. Reason: {}", to, subject,
                 t.getMessage());
         return false;
