@@ -78,7 +78,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("com.yash.Application")
+    mainClass.set("com.yash.notification.Application")
 }
 
 java {
